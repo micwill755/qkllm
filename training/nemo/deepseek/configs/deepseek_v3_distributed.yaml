@@ -1,0 +1,99 @@
+# DeepSeek V3 Distributed Training Configuration
+defaults:
+  - deepseek_v3_base
+
+name: deepseek_v3_distributed
+
+trainer:
+  devices: 4
+  num_nodes: 1
+  accelerator: gpu
+  precision: bf16
+  logger: True
+  enable_checkpointing: True
+  use_distributed_sampler: True
+  max_epochs: 10
+  max_steps: 10000
+  log_every_n_steps: 50
+  val_check_interval: 500
+  limit_val_batches: 50
+  accumulate_grad_batches: 4
+  gradient_clip_val: 1.0
+  strategy: ddp
+
+model:
+  # Larger model for distributed training
+  emb_dim: 1024
+  n_layers: 24
+  num_heads: 16
+  seq_len: 2048
+  
+  # More experts for distributed training
+  num_experts: 16
+  top_k: 2
+  expert_dim: 4096
+  
+  # Distributed training settings
+  micro_batch_size: 2
+  global_batch_size: 32
+  
+  # Model parallelism
+  tensor_model_parallel_size: 1
+  pipeline_model_parallel_size: 1
+  expert_model_parallel_size: 4  # Distribute experts across 4 GPUs
+  
+  # Memory optimizations
+  activations_checkpoint_granularity: full
+  activations_checkpoint_method: uniform
+  activations_checkpoint_num_layers: 1
+  
+  # Mixed precision
+  native_amp_init_scale: 4294967296
+  native_amp_growth_interval: 1000
+  hysteresis: 2
+  fp32_residual_connection: False
+  fp16_lm_cross_entropy: False
+  megatron_amp_O2: True
+  grad_allreduce_chunk_size_mb: 125
+  
+  # Expert parallelism specific
+  moe_aux_loss_coeff: 0.01
+  moe_z_loss_coeff: 0.001
+  
+  # Optimizer for distributed training
+  optim:
+    name: adamw
+    lr: 1e-4
+    weight_decay: 0.1
+    betas:
+      - 0.9
+      - 0.95
+    sched:
+      name: CosineAnnealing
+      warmup_steps: 2000
+      constant_steps: 1000
+      min_lr: 1e-5
+
+exp_manager:
+  explicit_log_dir: ./nemo_experiments
+  exp_dir: ./nemo_experiments
+  name: deepseek_v3_distributed
+  create_wandb_logger: True
+  wandb_logger_kwargs:
+    project: deepseek_v3_distributed
+    name: ${name}
+    tags:
+      - deepseek
+      - moe
+      - distributed
+  resume_if_exists: True
+  resume_ignore_no_checkpoint: True
+  create_checkpoint_callback: True
+  checkpoint_callback_params:
+    monitor: val_loss
+    save_top_k: 5
+    mode: min
+    always_save_nemo: True
+    save_nemo_on_train_end: True
+    filename: 'deepseek-v3-distributed--{val_loss:.3f}-{step}'
+    model_parallel_size: ${multiply:${model.tensor_model_parallel_size}, ${model.pipeline_model_parallel_size}}

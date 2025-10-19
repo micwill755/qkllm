@@ -1,0 +1,91 @@
+# DeepSeek V3 Base Configuration for NeMo
+name: deepseek_v3_base
+
+trainer:
+  devices: 1
+  num_nodes: 1
+  accelerator: gpu
+  precision: 16
+  logger: False
+  enable_checkpointing: False
+  use_distributed_sampler: False
+  max_epochs: 1
+  max_steps: 1000
+  log_every_n_steps: 10
+  val_check_interval: 100
+  limit_val_batches: 10
+  limit_test_batches: 10
+  accumulate_grad_batches: 1
+  gradient_clip_val: 1.0
+
+model:
+  # Model architecture
+  vocab_size: 1000
+  emb_dim: 64
+  n_layers: 2
+  num_heads: 4
+  seq_len: 32
+  
+  # MoE configuration
+  num_experts: 4
+  top_k: 2
+  expert_dim: 128
+  
+  # Model parallelism
+  tensor_model_parallel_size: 1
+  pipeline_model_parallel_size: 1
+  
+  # Training configuration
+  micro_batch_size: 2
+  global_batch_size: 2
+  
+  # Tokenizer
+  tokenizer:
+    library: 'tiktoken'
+    type: 'gpt2'
+    
+  # Data
+  data:
+    data_path: null
+    splits_string: "99,1,0"
+    seq_length: ${model.seq_len}
+    skip_warmup: True
+    num_workers: 2
+    dataloader_type: single
+    reset_position_ids: False
+    reset_attention_mask: False
+    eod_mask_loss: False
+
+  # Optimizer
+  optim:
+    name: adamw
+    lr: 2e-4
+    weight_decay: 0.01
+    betas:
+      - 0.9
+      - 0.95
+    sched:
+      name: CosineAnnealing
+      warmup_steps: 500
+      constant_steps: 0
+      min_lr: 2e-5
+
+exp_manager:
+  explicit_log_dir: null
+  exp_dir: null
+  name: deepseek_v3_experiment
+  create_wandb_logger: False
+  wandb_logger_kwargs:
+    project: deepseek_v3
+    name: ${name}
+  resume_if_exists: True
+  resume_ignore_no_checkpoint: True
+  create_checkpoint_callback: True
+  checkpoint_callback_params:
+    monitor: val_loss
+    save_top_k: 3
+    mode: min
+    always_save_nemo: False
+    save_nemo_on_train_end: True
+    filename: 'deepseek-v3--{val_loss:.2f}-{step}'
+    model_parallel_size: 1

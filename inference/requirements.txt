@@ -1,0 +1,6 @@
+flask
+tiktoken
+numpy
+pytest
+pytest-asyncio
+requests

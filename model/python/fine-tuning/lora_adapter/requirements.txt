@@ -1,0 +1,8 @@
+# LoRA Adapter Requirements
+numpy>=1.21.0
+tiktoken>=0.5.0
+
+# Optional dependencies for enhanced functionality
+# matplotlib>=3.5.0  # For plotting training curves
+# tqdm>=4.64.0       # For progress bars
+# wandb>=0.13.0      # For experiment tracking
