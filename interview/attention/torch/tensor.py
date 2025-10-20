@@ -52,6 +52,9 @@ class Tensor:
             shape += self._create_shape(arr[0])
         return shape
     
+    def update_shape(self, s):
+        self._shape = s
+    
     def _create_rand_tensor(self, s, v=0):
         if len(s) == 1:
             return [round(random.gauss(0, 1), 4) for i in range(s[0])]

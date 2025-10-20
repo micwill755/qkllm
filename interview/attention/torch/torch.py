@@ -21,6 +21,7 @@ def mat_mul(m1, m2):
     assert m1.shape[-1] == m2.shape[0], f"Cannot multiply shapes {m1.shape} and {m2.shape}"
     # 1D × 1D = dot product (scalar result)
     if len(m1.shape) == 1 and len(m2.shape) == 1:
+        # TODO: temporarily creating new tensors, need to modify current data
         tensor = Tensor((m2.shape[0]))
         weighted_sum = dot_product(m1, m2)
         return weighted_sum
@@ -35,8 +36,18 @@ def mat_mul(m1, m2):
         return tensor
 
 def reshape(m, s):
-    pass
+    batch, seq_len, emb_dim = m.shape
+    head_dim = s[-1]
+    for b in range(batch):
+        for t in range(seq_len):
+            head_dims = []
+            for e in range(0, emb_dim, head_dim):
+                chunk = m[b][t][e:e+head_dim]
+                head_dims.append(chunk)
+            m[b][t] = head_dims
 
+    m.update_shape(s)
+    return m
 
 def mask(m1):
     assert len(m1.shape) == 2, f"Cannot mask shape {m1.shape}, only 2 dim supported."

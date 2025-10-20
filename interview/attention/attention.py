@@ -127,6 +127,8 @@ class MultiHeadAttention:
 
         return self.out_proj(context)
 
-attention = MultiHeadAttention(inputs.shape[1], num_heads=4)
-out = attention(inputs.unsqueeze(0))
+emb_dim = 24
+inputs = torch.torch.randn((1, 8, emb_dim))
+attention = MultiHeadAttention(emb_dim, num_heads=4)
+out = attention(inputs)
 print(out)

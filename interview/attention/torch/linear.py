@@ -16,6 +16,6 @@ class Linear:
             batch, seq_len, emb_dim = x.shape
             result = Tensor((batch, seq_len, emb_dim))
             for b in range(batch):
-                result[b] = mat_mul(x, self.weights) #+ self.bias
+                result[b] = mat_mul(x[b], self.weights) #+ self.bias
             return result
         return 0
