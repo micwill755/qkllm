@@ -73,10 +73,22 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f'Using device: {device}')
 model = DeepSeekV3Model(test_cfg).to(device)
 
-def cross_entropy(logits, targets):
-    # Convert logits to probabilities using softmax
-    exp_logits = math.epx(logits - max(logits, dim=-1, keepdim=True))
-    probs = exp_logits / sum(exp_logits, dim=-1, keepdim=True)
+# multiple classes
+def categorical_cross_entropy(logits, targets):
+    # Softmax: convert logits to probabilities
+    exp_logits = torch.exp(logits - torch.max(logits, dim=-1, keepdim=True)[0])
+    probs = exp_logits / torch.sum(exp_logits, dim=-1, keepdim=True)
+    
+    # Get probability of correct token for each position
+    batch_size, seq_len = targets.shape
+    flat_targets = targets.view(-1)
+    flat_probs = probs.view(-1, probs.size(-1))
+    
+    # Extract probabilities for target tokens
+    target_probs = flat_probs[torch.arange(len(flat_targets)), flat_targets]
+
+    # Cross entropy: -mean(log(p_correct))
+    return -torch.mean(torch.log(target_probs + 1e-8))
 
 def train_batched(train_loader, optimizer, epochs=100):
     for epoch in range(epochs):
@@ -88,15 +100,10 @@ def train_batched(train_loader, optimizer, epochs=100):
             
             optimizer.zero_grad()
             logits = model(batch_inputs)
-            print(logits)
-
-            '''loss = torch.nn.functional.cross_entropy(
-                logits.view(-1, logits.size(-1)), 
-                batch_targets.view(-1)
-            )
+            loss = cross_entropy(logits, batch_targets)
             loss.backward()
             optimizer.step()
-            total_loss += loss.item()'''
+            total_loss += loss.item()
 
         print(f'Epoch {epoch}, Loss: {total_loss/len(train_loader):.4f}')
         prompt = "Hello world, my"
@@ -107,7 +114,7 @@ def train_batched(train_loader, optimizer, epochs=100):
 dataset = TensorDataset(torch.stack(input_ids), torch.stack(target_ids))
 train_loader = DataLoader(dataset, batch_size=128, shuffle=True, num_workers=4)
 optimizer = torch.optim.AdamW(model.parameters(), lr=0.0004, weight_decay=0.1)
-train_batched(train_loader, optimizer, 10)
+train_batched(train_loader, optimizer, 100)
 
 dummy_input = torch.randint(0, test_cfg["vocab_size"], (1, test_cfg["seq_len"])).to(device)
 onnx_path = "deepseek_v3.onnx"

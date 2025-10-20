@@ -85,7 +85,17 @@ class Tensor:
                     for j in range(self.shape[1]):
                         t[j][i] = self.tensor[i][j]
                 return t
-            
+    
+    def squeeze(self, dim=0):
+        # TODO: make this dynamic
+        if dim == 0 and len(self.shape) > 0 and self.shape[0] == 1:
+            return Tensor(self.tensor[0])
+    
+    def unsqueeze(self, dim=0):
+        # TODO: make this dynamic
+        if dim == 0:
+            return Tensor([self.tensor])
+
     @property
     def shape(self):
         return self._shape

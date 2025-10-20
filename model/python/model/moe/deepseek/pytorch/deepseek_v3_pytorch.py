@@ -29,28 +29,35 @@ class RMSNorm(nn.Module):
         x_normed = x * torch.rsqrt(means + self.eps)
         return (x_normed * self.weight).to(dtype=x.dtype)
 
-class ROPE (nn.Module):
-    def __init__(self, head_dim, max_seq_length=2048, base=10000):
+class RoPE(nn.Module):
+    def __init__(self, emb_dim, max_seq_len=2048, base=10000):
         super().__init__()
-        i = torch.arange(head_dim // 2, dtype=torch.float32)
-        self.frequencies = 1 / (base ** (2 * i / head_dim))
-        self.positions = torch.arange(max_seq_length, dtype=torch.float32)
-        self.angles = torch.outer(self.positions, self.frequencies)
+        self.emb_dim = emb_dim
+        inv_freq = 1.0 / (base ** (torch.arange(0, emb_dim, 2).float() / emb_dim))
+        self.register_buffer('inv_freq', inv_freq)
 
     def forward(self, x):
         # x shape: (batch, num_heads, seq_len, head_dim)
-        batch, num_heads, seq_len, head_dim = x.shape
-        x = x.view(batch, num_heads, seq_len, head_dim // 2, 2)
+        batch_size, num_heads, seq_len, head_dim = x.shape
         
-        for pos in range(seq_len):
-            for pair_idx in range(head_dim // 2):
-                angle = self.angles[pos, pair_idx]
-                X = x[:, :, pos, pair_idx, 0]
-                Y = x[:, :, pos, pair_idx, 1]
-                x[:, :, pos, pair_idx, 0] = X * torch.cos(angle) - Y * torch.sin(angle)
-                x[:, :, pos, pair_idx, 1] = X * torch.sin(angle) + Y * torch.cos(angle)
+        # Create position indices and compute frequencies
+        t = torch.arange(seq_len, device=x.device, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(t, self.inv_freq)  # (seq_len, head_dim//2)
         
-        return x.view(batch, num_heads, seq_len, head_dim)
+        cos = torch.cos(freqs)  # (seq_len, head_dim//2)
+        sin = torch.sin(freqs)
+        
+        # Reshape x into pairs: (batch, num_heads, seq_len, head_dim//2, 2)
+        x_pairs = x.view(batch_size, num_heads, seq_len, head_dim // 2, 2)
+        x1, x2 = x_pairs[..., 0], x_pairs[..., 1]
+        
+        # Apply rotation
+        rotated_x1 = x1 * cos - x2 * sin
+        rotated_x2 = x1 * sin + x2 * cos
+        
+        # Stack and reshape back
+        rotated = torch.stack([rotated_x1, rotated_x2], dim=-1)
+        return rotated.view(batch_size, num_heads, seq_len, head_dim)
 
 class Expert(nn.Module):
     def __init__(self, emb_dim, expert_dim):
@@ -120,7 +127,7 @@ class MultiHeadLatentAttention (nn.Module):
         self.head_dim = emb_dim // num_heads
         self.latent_dim = latent_dim
 
-        self.rope = ROPE(head_dim=self.head_dim, max_seq_length=max_seq_length)
+        self.rope = RoPE(emb_dim=self.head_dim, max_seq_len=max_seq_length)
 
         self.latent_tokens = nn.Linear(max_seq_length * emb_dim, latent_dim * emb_dim)
         self.query_W = nn.Linear(emb_dim, emb_dim)

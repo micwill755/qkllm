@@ -65,8 +65,6 @@ class RoPE:
         for i in range(0, emb_dim, 2):
             freq = 1.0 / (base ** (i / emb_dim))
             self.inv_freq.append(freq)
-        
-        print(self.inv_freq)
     
     '''
     When computing attention between two positions:
@@ -127,37 +125,6 @@ class RoPE:
                     x[b][pos][dim2_idx] = new_x2
         
         return x
-        
-
-class LlamaModel:
-    def __init__(self):
-        pass
-
-    def __call__(self, x):
-        self.forward(x)
-    
-    def forward(self, x):
-        pass
-
-class Embedding:
-    def __init__(self, vocab_size, emb_dim):
-        self.vocab_size = vocab_size
-        self.emb_dim = emb_dim
-        # Initialize random weights for each token
-        self.weight = []
-        for _ in range(vocab_size):
-            token_emb = [random.gauss(0, 0.02) for _ in range(emb_dim)]
-            self.weight.append(token_emb)
-    
-    def __call__(self, tokens):
-        return self.forward(tokens)
-
-    def forward(self, tokens):
-        """Convert list of token IDs to embeddings"""
-        embeddings = []
-        for token_id in tokens:
-            embeddings.append(self.weight[token_id])
-        return embeddings
 
 if __name__ == "__main__":
     encoder = tiktoken.get_encoding("gpt2")

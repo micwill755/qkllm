@@ -1,7 +1,7 @@
 import math
 import torch.torch
 from torch.tensor import Tensor
-from torch.torch import softmax, dot_product, mat_mul
+from torch.torch import softmax, dot_product, mat_mul, mask, reshape
 from torch.linear import Linear
 
 #inputs = torch.rand(6, 3)
@@ -43,7 +43,7 @@ att_weights = softmax(att_scores)
 context = mat_mul(att_weights, inputs)
 print(context)'''
 
-# 3. implementing self attention with trainable weights
+# implement self attention with trainable weights
 class SelfAttention:
     def __init__(self, d_in, d_out):
         self.q_W = Linear(d_in, d_out)
@@ -63,6 +63,70 @@ class SelfAttention:
         context = mat_mul(att_weights, value)
         return context
     
-attention = SelfAttention(inputs.shape[1], inputs.shape[1])
+'''attention = SelfAttention(inputs.shape[1], inputs.shape[1])
 out = attention(inputs)
+print(out)'''
+
+class SingleHeadCasualAttention:
+    def __init__(self, d_in, d_out):
+        self.q_W = Linear(d_in, d_out)
+        self.k_W = Linear(d_in, d_out)
+        self.v_W = Linear(d_in, d_out)
+
+    def __call__(self, x):
+        return self.forward(x)
+
+    def forward(self, x):
+        query = self.q_W(x)
+        key = self.k_W(x)
+        value = self.v_W(x)
+
+        att_scores = mat_mul(query, key.T)
+        att_scores = mask(att_scores)
+        att_weights = softmax(att_scores)
+        context = mat_mul(att_weights, value)
+        return context
+
+'''attention = SingleHeadCasualAttention(inputs.shape[1], inputs.shape[1])
+out = attention(inputs)
+print(out)'''
+
+class MultiHeadAttention:
+    def __init__(self, emd_dim, num_heads):
+        self.num_heads = num_heads
+        self.head_dim = emd_dim // num_heads
+
+        self.q_W = Linear(emd_dim, emd_dim)
+        self.k_W = Linear(emd_dim, emd_dim)
+        self.v_W = Linear(emd_dim, emd_dim)
+
+        self.out_proj = Linear(emd_dim, emd_dim)
+
+    def __call__(self, x):
+        return self.forward(x)
+
+    def forward(self, x):
+        # [batch, seq_len, emb_dim]
+        batch, seq_len, emb_dim = x.shape
+
+        query = self.q_W(x)
+        key = self.k_W(x)
+        value = self.v_W(x)
+
+        # reshape 
+        queries = reshape(query, (batch, seq_len, self.num_heads, self.head_dim))
+        keys = reshape(key, (batch, seq_len, self.num_heads, self.head_dim))
+        value = reshape(value, (batch, seq_len, self.num_heads, self.head_dim))
+
+        att_scores = mat_mul(query, key.T) // (self.emb_dim ** 0.5)
+
+        att_scores = mask(att_scores)
+        att_weights = softmax(att_scores)
+        context = mat_mul(att_weights, value)
+        # combines heads
+
+        return self.out_proj(context)
+
+attention = MultiHeadAttention(inputs.shape[1], num_heads=4)
+out = attention(inputs.unsqueeze(0))
 print(out)

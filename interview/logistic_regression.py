@@ -37,8 +37,8 @@ class LogisticRegression:
     def _sigmoid(self, x):
         return 1 / (1 + np.exp(-x))
 
-# cross entropy loss instead of mse
-def cross_entropy_loss(yhat, y):
+# cross entropy loss instead of mse - 2 classes only
+def binary_cross_entropy_loss(yhat, y):
     eps = 1e-15 # in case yhat is 0
     yhat = np.clip(yhat, 1e-15, 1-eps)
     return -np.mean(y * np.log(yhat))
@@ -48,7 +48,7 @@ def bgd(model, x, y, epochs, learning_rate=0.01):
     cost = []
     for e in range(epochs):
         yhat = model.forward(x)
-        loss = cross_entropy_loss(yhat, y)
+        loss = binary_cross_entropy_loss(yhat, y)
         cost.append(loss)
         model.backward(x, yhat, y, learning_rate)
 

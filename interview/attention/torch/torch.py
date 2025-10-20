@@ -33,7 +33,18 @@ def mat_mul(m1, m2):
                     weighted_sum += (m1[i][k] * m2[k][j])
                 tensor[i][j] = round(weighted_sum, 4)
         return tensor
-    
+
+def reshape(m, s):
+    pass
+
+
+def mask(m1):
+    assert len(m1.shape) == 2, f"Cannot mask shape {m1.shape}, only 2 dim supported."
+    for i in range(len(m1)):
+        for j in range(i + 1, len(m1[i])):
+            m1[i][j] = float('-inf')
+    return m1
+
 def randn(shape):
     return Tensor(shape, use_rand=True)
 
