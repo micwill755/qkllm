@@ -113,19 +113,41 @@ class MultiHeadAttention:
         key = self.k_W(x)
         value = self.v_W(x)
 
-        # reshape 
+        # reshape - [b, s, e_d] -> [b, s, h, h_d]
+
+        '''
+        batch
+            |      
+            s - head 1 - [0, 0, 0, 0 ,0, 0], [0, ]
+                       - [0, 0, 0, 0 ,0, 0]
+        
+        d1. d2.     d3.      d4
+        b - token - head 1 - [0, 0, 0, 0, 0, 0]
+                  - head 2 - [0, 0, 0, 0, 0, 0]
+                  - head 3 - [0, 0, 0, 0, 0, 0]
+                  - head 4 - [0, 0, 0, 0, 0, 0]
+
+        
+        '''
         queries = reshape(query, (batch, seq_len, self.num_heads, self.head_dim))
         keys = reshape(key, (batch, seq_len, self.num_heads, self.head_dim))
         value = reshape(value, (batch, seq_len, self.num_heads, self.head_dim))
 
-        att_scores = mat_mul(query, key.T) // (self.emb_dim ** 0.5)
-
+        # TODO - we can remove these and go straight to mat mul
+        queries = queries.transpose(1, 2)
+        keys = keys.transpose(1, 2)
+        value = value.transpose(1, 2)
+        
+        att_scores = mat_mul(queries, keys.transpose(2, 3)) / math.sqrt(self.head_dim)
         att_scores = mask(att_scores)
         att_weights = softmax(att_scores)
         context = mat_mul(att_weights, value)
-        # combines heads
 
-        return self.out_proj(context)
+        # TODO - we can remove these and go straight to mat mul
+        context = context.transpose(1, 2)
+        combined_heads_context = reshape(context, (batch, seq_len, emb_dim))
+
+        return self.out_proj(combined_heads_context)
 
 emb_dim = 24
 inputs = torch.torch.randn((1, 8, emb_dim))

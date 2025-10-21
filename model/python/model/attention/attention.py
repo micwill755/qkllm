@@ -216,9 +216,9 @@ class MultiHeadAttention:
 
         # other attention implementations require this tranposition but we are going to cut it out 
         # we have to transpose the 3d tensor from [tokens, heads, embeddings] -> [heads, tokens, embeddings]
-        #queries = transpose_nd(queries, 0, 1)
-        #keys = transpose_nd(keys, 0, 1)
-        #values = transpose_nd(values, 0, 1)
+        # queries = transpose_nd(queries, 0, 1)
+        # keys = transpose_nd(keys, 0, 1)
+        # values = transpose_nd(values, 0, 1)
 
         att_scores = mat_mul_nd(queries, transpose_nd(keys, 2, 3)) / np.sqrt(self.head_dim)
 

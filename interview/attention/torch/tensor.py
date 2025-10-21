@@ -1,4 +1,5 @@
 import random
+from itertools import product
 
 class Tensor:
     def __init__(self, data, v=0, use_rand=False):
@@ -13,13 +14,33 @@ class Tensor:
             self._shape = self._create_shape(data)
         
     def __getitem__(self, index):
+        # TODO avoid copying
+        if isinstance(index, tuple):
+            result = self.tensor
+            for idx in index:
+                result = result[idx]
+            return result if not isinstance(result, list) else Tensor(result)
+        
         if isinstance(self.tensor[index], list):
             return Tensor(self.tensor[index])
         return self.tensor[index]
-    
+
     def __setitem__(self, index, value):
-        self.tensor[index] = value
-    
+        if isinstance(index, tuple):
+            result = self.tensor
+            for idx in index[:-1]:
+                result = result[idx]
+            result[index[-1]] = value
+        else:
+            self.tensor[index] = value
+
+    def __truediv__(self, scalar):
+        result = Tensor(self.shape)
+        batch_indices = product(*[range(d) for d in self.shape])
+        for idx in batch_indices:
+            result[idx] = self[idx] / scalar
+        return result
+
     def __len__(self):
         return len(self.tensor)
     
@@ -77,17 +98,56 @@ class Tensor:
         self.tensor.append(item)
         self._shape = self._create_shape(self.tensor)
     
+    def get_value_at(self, tensor, indices):
+        for idx in indices:
+            tensor = tensor[idx]
+        return tensor
+
+    def set_value_at(self, tensor, indices, value):
+        for idx in indices[:-1]:
+            tensor = tensor[idx]
+        tensor[indices[-1]] = value
+    
+    # recursive approach
+    def iterate(self, d1, d2, newTensor, current_indices):
+        # Base case: we have a complete index pointing to an element
+        if len(current_indices) == len(self._shape):
+            # Swap d1 and d2 positions in the index
+            new_indices = list(current_indices)
+            new_indices[d1], new_indices[d2] = new_indices[d2], new_indices[d1]
+            
+            # Copy element from old position to new position
+            value = self.get_value_at(self.tensor, current_indices)
+            self.set_value_at(newTensor.tensor, new_indices, value)
+            return
+        
+        # Recursive case: add next dimension index
+        current_dim = len(current_indices)
+        for i in range(self.shape[current_dim]):
+            self.iterate(d1, d2, newTensor, current_indices + [i])
+
     def _transpose(self, d1=-1, d2=-1):
-        # we arent providing the dimensions to tranpose
-        if d1 == -1:
-            if len(self.shape) == 1:
-                return Tensor(self.tensor)
-            if len(self.shape) == 2: 
-                t = Tensor(self.shape[::-1])
-                for i in range(self.shape[0]):
-                    for j in range(self.shape[1]):
-                        t[j][i] = self.tensor[i][j]
-                return t
+        # TODO first implementation creating new Tensor, need to improve
+        # convert shape
+        shape_list = list(self._shape)
+        shape_list[d1], shape_list[d2] = shape_list[d2], shape_list[d1]
+        new_shape = tuple(shape_list)
+        # new shape will be created when instantiated
+        newTensor = Tensor(new_shape)
+        
+        # using recursion
+        # self.iterate(d1, d2, newTensor, [])
+        # using iter tools
+        for indices in product(*[range(d) for d in self.shape]):
+            new_indices = list(indices)
+            new_indices[d1], new_indices[d2] = new_indices[d2], new_indices[d1]
+            value = self.get_value_at(self.tensor, indices)
+            self.set_value_at(newTensor.tensor, new_indices, value)
+
+        return newTensor
+            
+    def transpose(self, d1=-1, d2=-1):
+        return self._transpose(d1, d2)
     
     def squeeze(self, dim=0):
         # TODO: make this dynamic
@@ -105,4 +165,4 @@ class Tensor:
     
     @property
     def T(self):
-        return self._transpose()
+        return self._transpose(-2, -1)
