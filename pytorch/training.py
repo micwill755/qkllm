@@ -1,8 +1,12 @@
 import torch.nn.functional as F
 import torch
+import time
+
 from torch.utils.data import DataLoader
 from multilayer_nn import NeuralNetwork
 from dataloader import ToyDataset
+
+start_time = time.time()
 
 # create dummy data
 X_train = torch.tensor([
@@ -37,7 +41,8 @@ test_loader = DataLoader(
     num_workers=0)
 
 torch.manual_seed(123)
-model = NeuralNetwork(num_inputs=2, num_outputs=2)
+device = torch.device("cuda" if not torch.cuda.is_available() else "cpu")
+model = NeuralNetwork(num_inputs=2, num_outputs=2).to(device)
 print(f'Model parameters: {sum([p.numel() for p in model.parameters() if p.requires_grad])}')
 optimizer = torch.optim.SGD(
     model.parameters(), lr=0.5
@@ -47,6 +52,7 @@ num_epochs = 3
 for epoch in range(num_epochs):
     model.train()
     for batch_idx, (features, labels) in enumerate(train_loader):
+        features, labels = features.to(device), labels.to(device)
         logits = model(features)
         loss = F.cross_entropy(logits, labels)
         optimizer.zero_grad()
@@ -60,7 +66,7 @@ for epoch in range(num_epochs):
 # switch to eval for inference and to eval prediction
 model.eval()
 with torch.no_grad():
-    outputs = model(X_train)
+    outputs = model(X_train.to(device))
 print(outputs)
 
 torch.set_printoptions(sci_mode=False)
@@ -73,7 +79,7 @@ print(predictions)
 predictions = torch.argmax(outputs, dim=1)
 print(predictions)
 
-print(predictions == y_train)
+print(predictions == y_train.to(device))
 
 def compute_accuracy(model, data_loader):
     model = model.eval()
@@ -81,6 +87,7 @@ def compute_accuracy(model, data_loader):
     total_examples = 0
 
     for idx, (features, labels) in enumerate(data_loader):
+        features, labels = features.to(device), labels.to(device)
         with torch.no_grad():
             logits = model(features)
         
@@ -94,6 +101,9 @@ def compute_accuracy(model, data_loader):
 print(f'Compute accuracy')
 print(f'Train accuracy {compute_accuracy(model, train_loader)}')
 print(f'Test accuracy {compute_accuracy(model, test_loader)}')
+
+end_time = time.time()
+print(end_time - start_time)
 
 '''print(f'Save model')
 torch.save(model.state_dict(), "model.pth")

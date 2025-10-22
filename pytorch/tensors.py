@@ -67,3 +67,4 @@ w = z.reshape(6)
 print(z.data_ptr() == w.data_ptr())  # False - different memory!
 w[0] = 999
 print(z)  # tensor([[1, 4], [2, 5], [3, 6]]) - z unchanged!
+
