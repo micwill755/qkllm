@@ -14,7 +14,7 @@ class FeedForwardGPT(Module):
         x = self.gelu.forward(x)
         x = self.linear2.forward(x)
         return x
-
+    
 class FeedForwardLlama(Module):
     def __init__(self, cfg):
         super().__init__()

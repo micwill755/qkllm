@@ -2,7 +2,7 @@ import numpy as np
 from model.python.model.attention.attention import CausalAttention, ScaledDotProductAttention, MultiHeadAttention
 from linear import Linear
 from norm import LayerNorm
-from feed_forward import FeedForwardGPT
+from model.python.model.feedforward import FeedForwardGPT
 from model.embedding import Embedding
 
 class Block():

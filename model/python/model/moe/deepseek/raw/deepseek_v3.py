@@ -8,7 +8,7 @@ from ROPE import ROPE, test_rope
 from model.linear import Linear, Linear1d
 from model.lib.matrix_helper import mat_mul_1d, apply_cause_mask_1d
 from model.norm import RMSNorm
-from model.feed_forward import Expert
+from model.python.model.feedforward import Expert
 from model.embedding import Embedding1d
 from model.moe.expert_tracker import ExpertTracker
 
