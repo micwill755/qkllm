@@ -1,6 +1,6 @@
 import math
 from .tensor import Tensor
-from .torch import mat_mul, randn
+from .mtrx import mat_mul, randn
 
 class Linear:
     def __init__(self, d_in, d_out):

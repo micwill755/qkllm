@@ -1,5 +1,5 @@
 import numpy as np
-from .lib.matrix_helper import transpose, mat_mul, reshape
+from lib.matrix_helper import transpose, mat_mul, reshape
 
 import random
 

@@ -75,16 +75,21 @@ def softmax(tensor):
         tensor[batch_idx] = [round(e / sum(ek), 4) for e in ek]
     return tensor
 
-def mask(m1):
+def mask(m1, window=-1):
     # Mask last 2 dimensions (upper triangle) for all batch dims
     batch_dims = m1.shape[:-2]
     batch_indices = product(*[range(d) for d in batch_dims]) if batch_dims else [()]
     seq_len = m1.shape[-1]
     
     for batch_idx in batch_indices:
-        for i in range(seq_len):
-            for j in range(i + 1, seq_len):
-                m1[batch_idx + (i, j)] = float('-inf')
+        for t in range(seq_len):
+            # mask upper diagonal
+            for j in range(t + 1, seq_len):
+                m1[batch_idx + (t, j)] = float('-inf')
+            # mask window
+            if window > 0 and t >= window:
+                for j in range(t - window, -1, -1):
+                    m1[batch_idx + (t, j)] = float('-inf')
     return m1
 
 def randn(shape):

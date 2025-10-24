@@ -1,8 +1,10 @@
 from model.linear import Linear, Linear1d
 from model.activation_functions import GELU, SwiGLU
+from mtrx.module import Module
 
-class FeedForwardGPT():
+class FeedForwardGPT(Module):
     def __init__(self, cfg):
+        super().__init__()
         self.linear1 = Linear(cfg["emb_dim"], 4 * cfg["emb_dim"])
         self.gelu = GELU()
         self.linear2 = Linear(4 * cfg["emb_dim"], cfg["emb_dim"])
@@ -13,7 +15,7 @@ class FeedForwardGPT():
         x = self.linear2.forward(x)
         return x
 
-class FeedForwardLlama():
+class FeedForwardLlama(Module):
     def __init__(self, cfg):
         super().__init__()
         self.fc1 = Linear(cfg["emb_dim"], cfg["hidden_dim"], dtype=cfg["dtype"], bias=False)
