@@ -100,7 +100,7 @@ def train_batched(train_loader, optimizer, epochs=100):
             
             optimizer.zero_grad()
             logits = model(batch_inputs)
-            loss = cross_entropy(logits, batch_targets)
+            loss = categorical_cross_entropy(logits, batch_targets)
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
