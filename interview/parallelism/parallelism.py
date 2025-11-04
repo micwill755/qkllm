@@ -137,6 +137,92 @@ class PipelineParallelMLPBlock:
     def update(self, learning_rate):
         pass
 
+class MLPPBlock:
+    def __init__(self, fc1_weights, fc1_bias, fc2_weights, fc2_bias, pp_size, tp_size, num_gpus):
+        self.pp_size = pp_size
+        self.tp_size = tp_size
+
+        # check we have enough gpus for pp and tp split
+        assert pp_size * tp_size == num_gpus
+
+        # step 1: pipelines parallilism - split layers
+        self.layers = [
+            Linear(fc1_weights, fc1_bias), 
+            ReLU(), 
+            Linear(fc2_weights, fc2_bias)]
+        
+        num_layers = len(self.layers)
+        layers_per_stage = num_layers // pp_size
+        # depending on pipeline size, layers dont divide equally
+        # so we add an additional layer to first stages
+        remainder = num_layers % pp_size
+
+        self.stages = []
+        layer_idx = 0
+
+        # distribute layers across stages
+        for i in range(pp_size):
+            # first 'remainder' stages get an extra layer
+            stage_size = layers_per_stage + (1 if i < remainder else 0)
+            # Slice layers for this stage
+            stage_layers = self.layers[layer_idx:layer_idx + stage_size]
+            self.stages.append(stage_layers)
+            layer_idx += stage_size
+        
+        #eg [[fc1_weights, fc1_bias], ReLU() [fc2_weights, fc2_bias]]
+
+        self.tp_stages = []
+
+        # step 2 tensor parallelism - split hidden layer
+        for stage in self.stages:
+            tp_stage = []
+            linear_count = 0  # Track which Linear layer we're on in this stage
+            
+            for layer in stage:
+                if isinstance(layer, Linear):
+                    C_in_dim = layer.weights.shape[0]
+                    C_out_dim = layer.weights.shape[1]
+                    
+                    if linear_count == 0:
+                        # First Linear in stage: COLUMN-PARALLEL (split output)
+                        hidden_per_shard = C_out_dim // tp_size
+                        shards = []
+                        for i in range(tp_size):
+                            start = i * hidden_per_shard
+                            end = (i + 1) * hidden_per_shard
+                            shard_weights = layer.weights[:, start:end]  # Split columns
+                            shard_bias = layer.bias[:, start:end]
+                            shards.append({'weights': shard_weights, 'bias': shard_bias})
+                        
+                        tp_stage.append({'type': 'linear_column_tp', 'shards': shards})
+                    else:
+                        # Subsequent Linear: ROW-PARALLEL (split input)
+                        hidden_per_shard = C_in_dim // tp_size
+                        shards = []
+                        for i in range(tp_size):
+                            start = i * hidden_per_shard
+                            end = (i + 1) * hidden_per_shard
+                            shard_weights = layer.weights[start:end, :]  # Split rows
+                            shards.append({'weights': shard_weights, 'bias': layer.bias})
+                        
+                        tp_stage.append({'type': 'linear_row_tp', 'shards': shards})
+                    
+                    linear_count += 1
+                else:
+                    # TEMP: ReLU - no splitting
+                    tp_stage.append({'type': 'relu', 'layer': layer})
+            
+            self.tp_stages.append(tp_stage)
+            
+    def forward(self, x):
+        pass
+
+    def backward(self, grad_output):
+        pass
+
+    def update(self, learning_rate):
+        pass
+
 if __name__ == "__main__":  
     # --- 1. Set Parameters ---
     B, C_in, C_hidden, C_out = 4, 8, 32, 8
