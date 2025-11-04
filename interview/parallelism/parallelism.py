@@ -72,8 +72,8 @@ class TensorParallelMLPBlock:
         for i in range(tp_size):
             start_idx = i * hidden_per_shard
             end_idx = (i + 1) * hidden_per_shard
-            self.W1.append(fc1_weights[:, start_idx:end_idx])  # (C_in, hidden_per_shard)
-            self.b1.append(fc1_bias[:, start_idx:end_idx])     # (1, hidden_per_shard)
+            self.W1.append(fc1_weights[:, start_idx:end_idx]) 
+            self.b1.append(fc1_bias[:, start_idx:end_idx]) 
 
         # Row-parallel fc2: split along input dimension (axis=0) to match fc1 sharding
         self.W2 = []
@@ -90,39 +90,49 @@ class TensorParallelMLPBlock:
         self.h_pre = [None] * tp_size  # pre-ReLU activations
         self.h = [None] * tp_size      # post-ReLU activations
 
-
     def forward(self, x):
-        self.x = x
-        # Column-parallel fc1 + ReLU per shard
-        for i in range(self.tp_size):
-           self.h_pre[i] = x.dot(self.W1[i]) + self.b1[i]
-           self.h[i] = np.maximum(0, self.h_pre[i]) # ReLU
-        
-        # Row-parallel fc2: compute partial outputs and sum
-        y = np.zeros((x.shape[0], self.b2.shape[1]))
-        for i in range(self.tp_size):
-            y += self.h[i].dot(self.W2[i])
-        
-        # Add bias once after sum
-        y += self.b2
-        return y
+        # TODO
+        pass
 
     def backward(self, grad_output):
-        # Initialize gradient accumulator for input
-        dx = np.zeros_like(self.x)
+        pass
+
+    def update(self, learning_rate):
+        pass
+
+class PipelineParallelMLPBlock:
+    def __init__ (self, fc1_weights, fc1_bias, fc2_weights, fc2_bias, pp_size=2):
+        self.pp_size = pp_size
+        self.layers = [
+            Linear(fc1_weights, fc1_bias), 
+            ReLU(), 
+            Linear(fc2_weights, fc2_bias)]
         
-        # Backward through each shard
-        for i in range(self.tp_size):
-            # fc2 backward: grad flows back to h[i]
-            dh_i = grad_output.dot(self.W2[i].T)
+        num_layers = len(self.layers)
+        layers_per_stage = num_layers // pp_size
+        # depending on pipeline size, layers dont divide equally
+        # so we add an additional layer to first stages
+        remainder = num_layers % pp_size
+
+        self.stages = []
+        layer_idx = 0
+
+        # distribute layers across stages
+        for i in range(pp_size):
+            # first 'remainder' stages get an extra layer
+            stage_size = layers_per_stage + (1 if i < remainder else 0)
+            # Slice layers for this stage
+            stage_layers = self.layers[layer_idx:layer_idx + stage_size]
+            self.stages.append(stage_layers)
             
-            # ReLU backward
-            dh_pre_i = dh_i * (self.h_pre[i] > 0)
-            
-            # fc1 backward: accumulate dx
-            dx += dh_pre_i.dot(self.W1[i].T)
-        
-        return dx
+            layer_idx += stage_size
+                    
+    def forward(self, x):
+        # TODO
+        pass
+
+    def backward(self, grad_output):
+        pass
 
     def update(self, learning_rate):
         pass
@@ -132,6 +142,7 @@ if __name__ == "__main__":
     B, C_in, C_hidden, C_out = 4, 8, 32, 8
     learning_rate = 0.01
     TP_SIZE = 2
+    PP_SIZE = 2
     np.random.seed(42)
 
     fc1_weights = np.random.randn(C_in, C_hidden) * 0.01
@@ -144,10 +155,21 @@ if __name__ == "__main__":
         fc2_weights.copy(), fc2_bias.copy()
     )
     
+    # part 1 - first we are going to create seperate MLP objects to handle parallelism seperately
+    # part 2 - then we will create one MLP block that can handle parallelism strategies cohesively
     tp_model = TensorParallelMLPBlock(
         fc1_weights.copy(), fc1_bias.copy(), 
         fc2_weights.copy(), fc2_bias.copy(), 
         tp_size=TP_SIZE
+    )
+
+    fc_weights = [fc1_weights.copy(), fc2_weights.copy()]
+    fc_bias = [fc1_bias.copy(), fc2_bias.copy()]
+
+    pp_model = PipelineParallelMLPBlock(
+        fc1_weights.copy(), fc1_bias.copy(), 
+        fc2_weights.copy(), fc2_bias.copy(), 
+        pp_size=PP_SIZE
     )
 
     np.random.seed(123) # Use a different seed for data
