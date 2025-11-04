@@ -58,23 +58,71 @@ class MLPBlock:
         self.fc1.update(learning_rate)
         self.fc2.update(learning_rate)
 
-
-
-
 class TensorParallelMLPBlock:
     def __init__(self, fc1_weights, fc1_bias, fc2_weights, fc2_bias, tp_size=2):
-        fc1_weights_shard_size = len(fc1_weights) / 2
-        print('Michae;', fc1_weights_shard_size)
-        shard0 = fc1_weights[fc1_weights_shard_size:]
-        shard1 = fc1_weights[:fc1_weights_shard_size]
+        self.tp_size = tp_size
+        C_in, C_hidden = fc1_weights.shape 
 
-        pass
+         # Split hidden dimension evenly across shards
+        hidden_per_shard = C_hidden // tp_size
+
+        # Column-parallel fc1: split along hidden dimension (axis=1)
+        self.W1 = []
+        self.b1 = []
+        for i in range(tp_size):
+            start_idx = i * hidden_per_shard
+            end_idx = (i + 1) * hidden_per_shard
+            self.W1.append(fc1_weights[:, start_idx:end_idx])  # (C_in, hidden_per_shard)
+            self.b1.append(fc1_bias[:, start_idx:end_idx])     # (1, hidden_per_shard)
+
+        # Row-parallel fc2: split along input dimension (axis=0) to match fc1 sharding
+        self.W2 = []
+        for i in range(tp_size):
+            start_idx = i * hidden_per_shard
+            end_idx = (i + 1) * hidden_per_shard
+            self.W2.append(fc2_weights[start_idx:end_idx, :])  # (hidden_per_shard, C_out)
+
+        # fc2 bias is shared (added once after sum)
+        self.b2 = fc2_bias.copy()
+        
+        # Cache for backward pass
+        self.x = None
+        self.h_pre = [None] * tp_size  # pre-ReLU activations
+        self.h = [None] * tp_size      # post-ReLU activations
+
 
     def forward(self, x):
-        pass
+        self.x = x
+        # Column-parallel fc1 + ReLU per shard
+        for i in range(self.tp_size):
+           self.h_pre[i] = x.dot(self.W1[i]) + self.b1[i]
+           self.h[i] = np.maximum(0, self.h_pre[i]) # ReLU
+        
+        # Row-parallel fc2: compute partial outputs and sum
+        y = np.zeros((x.shape[0], self.b2.shape[1]))
+        for i in range(self.tp_size):
+            y += self.h[i].dot(self.W2[i])
+        
+        # Add bias once after sum
+        y += self.b2
+        return y
 
     def backward(self, grad_output):
-        pass
+        # Initialize gradient accumulator for input
+        dx = np.zeros_like(self.x)
+        
+        # Backward through each shard
+        for i in range(self.tp_size):
+            # fc2 backward: grad flows back to h[i]
+            dh_i = grad_output.dot(self.W2[i].T)
+            
+            # ReLU backward
+            dh_pre_i = dh_i * (self.h_pre[i] > 0)
+            
+            # fc1 backward: accumulate dx
+            dx += dh_pre_i.dot(self.W1[i].T)
+        
+        return dx
 
     def update(self, learning_rate):
         pass
@@ -120,109 +168,3 @@ if __name__ == "__main__":
     assert np.allclose(seq_grad_input, tp_grad_input, atol=1e-9)
 
     print("Test Passed")
-
-'''
-fc1 is column-parallel: split along its output/hidden dimension; each shard keeps its own bias.
-
-fc2 is row-parallel: split along its input/hidden rows; shard outputs are summed; fc2_bias is held once and added after the sum.
-
-Backward:
-
-For fc2: dW2_i = h_iᵀ @ dy, db2 = sum(dy), dh_i = dy @ W2_iᵀ.
-
-ReLU per shard.
-
-For fc1: dW1_i = xᵀ @ dh_pre_i, db1_i = sum(dh_pre_i), and dx is the sum over shards of dh_pre_i @ W1_iᵀ.
-
-'''
-class TensorParallelMLPBlock:
-    """
-    Column-parallel fc1 (split hidden/out features) +
-    Row-parallel fc2 (split hidden/in rows); bias2 is applied once after the reduce-sum.
-
-    Shapes:
-      x:          (B, C_in)
-      fc1 W:      (C_in, C_hidden)  -> split along axis=1 into shards
-      fc1 b:      (1, C_hidden)     -> split along axis=1 into shards
-      ReLU:       per-shard
-      fc2 W:      (C_hidden, C_out) -> split along axis=0 into matching shards
-      fc2 b:      (1, C_out)        -> kept whole, added once after sum(y_i)
-    """
-    def __init__(self, fc1_weights, fc1_bias, fc2_weights, fc2_bias, tp_size=2):
-        assert fc1_weights.ndim == 2 and fc2_weights.ndim == 2
-        assert fc1_bias.shape[1] == fc1_weights.shape[1]
-        assert fc2_weights.shape[0] == fc1_weights.shape[1]
-        self.tp_size = tp_size
-
-        C_in, C_hidden = fc1_weights.shape
-        # Split hidden dim indices as evenly as possible
-        hidden_splits = np.array_split(np.arange(C_hidden), tp_size)
-
-        # Sharded params
-        self.W1 = [fc1_weights[:, idx] for idx in hidden_splits]          # (C_in, h_i)
-        self.b1 = [fc1_bias[:, idx] for idx in hidden_splits]             # (1, h_i)
-        self.W2 = [fc2_weights[idx, :] for idx in hidden_splits]          # (h_i, C_out)
-
-        # Single shared bias for row-parallel fc2
-        self.b2 = fc2_bias.copy()                                         # (1, C_out)
-
-        # Grads (same structure)
-        self.dW1 = [np.zeros_like(w) for w in self.W1]
-        self.db1 = [np.zeros_like(b) for b in self.b1]
-        self.dW2 = [np.zeros_like(w) for w in self.W2]
-        self.db2 = np.zeros_like(self.b2)
-
-        # Caches
-        self.x = None
-        self.h_pre = [None]*tp_size   # pre-activation for ReLU (per shard)
-        self.h = [None]*tp_size       # post-activation (per shard)
-
-    def forward(self, x):
-        self.x = x
-        # fc1 per shard -> ReLU per shard
-        for i in range(self.tp_size):
-            h_pre_i = x.dot(self.W1[i]) + self.b1[i]          # (B, h_i)
-            self.h_pre[i] = h_pre_i
-            self.h[i] = np.maximum(0.0, h_pre_i)              # ReLU
-
-        # fc2 row-parallel: y_i = h_i @ W2_i ; then sum_i y_i, then add b2 once
-        y = np.zeros((x.shape[0], self.b2.shape[1]), dtype=x.dtype)
-        for i in range(self.tp_size):
-            y += self.h[i].dot(self.W2[i])                    # (B, C_out)
-        y += self.b2
-        return y
-
-    def backward(self, grad_output):
-        """
-        grad_output: (B, C_out)
-        Returns grad_input dx: (B, C_in)
-        """
-        B = grad_output.shape[0]
-
-        # fc2 row-parallel grads:
-        # dW2_i = h_i^T @ dy ; db2 = sum(dy) once ; dh_i = dy @ W2_i^T
-        for i in range(self.tp_size):
-            self.dW2[i] = self.h[i].T.dot(grad_output)        # (h_i, C_out)
-        self.db2 = np.sum(grad_output, axis=0, keepdims=True) # (1, C_out)
-
-        # Backprop to h_i through ReLU
-        dx = np.zeros((B, self.x.shape[1]), dtype=self.x.dtype)
-        for i in range(self.tp_size):
-            dh_i = grad_output.dot(self.W2[i].T)              # (B, h_i)
-            # ReLU backward
-            dh_pre_i = dh_i * (self.h_pre[i] > 0)             # (B, h_i)
-
-            # fc1 column-parallel grads and dx contribution
-            self.dW1[i] = self.x.T.dot(dh_pre_i)              # (C_in, h_i)
-            self.db1[i] = np.sum(dh_pre_i, axis=0, keepdims=True)  # (1, h_i)
-            dx += dh_pre_i.dot(self.W1[i].T)                  # accumulate (B, C_in)
-
-        return dx
-
-    def update(self, learning_rate):
-        # SGD step on all shards + shared bias2
-        for i in range(self.tp_size):
-            self.W1[i] -= learning_rate * self.dW1[i]
-            self.b1[i] -= learning_rate * self.db1[i]
-            self.W2[i] -= learning_rate * self.dW2[i]
-        self.b2 -= learning_rate * self.db2
