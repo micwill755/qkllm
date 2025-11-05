@@ -92,7 +92,28 @@ class TensorParallelMLPBlock:
 
     def forward(self, x):
         # TODO
-        pass
+        '''h = self.fc1.forward(x)
+        h_relu = self.relu.forward(h)
+        y = self.fc2.forward(h_relu)
+        return y'''
+
+        self.x = x
+
+        # Column-parallel fc1 + ReLU per shard
+        for i in range(self.tp_size):
+            self.h_pre[i] = x.dot(self.W1[i]) + self.b1[i]
+            self.h[i] = np.maximum(0, self.h_pre[i])  # ReLU
+
+        # TODO - implement working example for distributed gpus, e.g. use containers to simulate
+        # all-reduce sum simulation on single machine
+        # Row-parallel fc2: compute partial outputs and sum
+        y = np.zeros((x.shape[0], self.W2[0].shape[1]))
+        for i in range(self.tp_size):
+            y += self.h[i].dot(self.W2[i])  # Add each shard's contribution
+        
+        y += self.b2
+        
+        return y
 
     def backward(self, grad_output):
         pass
