@@ -58,9 +58,10 @@ def reshape(m, s):
             b, t = batch_idx
             embedding = []
             for h in range(num_heads):
-                for e in range(len(m[b][t][h])):
-                    embedding.append(m[b][t][h][e])
-            m[b][t] = embedding
+                head_tensor = m.tensor[b][t][h]
+                for e in range(head_dim):
+                    embedding.append(head_tensor[e])
+            m.tensor[b][t] = embedding
         m.update_shape(s)
     return m
 

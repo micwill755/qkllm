@@ -97,32 +97,28 @@ class RoPE:
         return self.forward(x)
 
     def forward(self, x):
-        batch_size = len(x)
-        seq_len = len(x[0])
+        # x shape: (batch, num_heads, seq_len, head_dim)
+        batch_size, num_heads, seq_len, head_dim = x.shape
         cos_table, sin_table = self.get_cos_and_sin(seq_len)
 
-        # Apply rotation to each batch, position, and dimension pair
         for b in range(batch_size):
-            for pos in range(seq_len):
-                for pair_idx in range(self.pairs):
-                    # Get the pair of dimensions
-                    dim1_idx = pair_idx * 2
-                    dim2_idx = pair_idx * 2 + 1
-                    
-                    x1 = x[b][pos][dim1_idx]  # "real" part
-                    x2 = x[b][pos][dim2_idx]  # "imaginary" part
-                    
-                    # Get rotation angle for this position and pair
-                    cos_val = cos_table[pos][pair_idx]
-                    sin_val = sin_table[pos][pair_idx]
-                    
-                    # Apply 2D rotation
-                    new_x1 = x1 * cos_val - x2 * sin_val
-                    new_x2 = x1 * sin_val + x2 * cos_val
-                    
-                    # Update in place
-                    x[b][pos][dim1_idx] = new_x1
-                    x[b][pos][dim2_idx] = new_x2
+            for h in range(num_heads):
+                for pos in range(seq_len):
+                    for pair_idx in range(self.pairs):
+                        dim1_idx = pair_idx * 2
+                        dim2_idx = pair_idx * 2 + 1
+                        
+                        x1 = x.tensor[b][h][pos][dim1_idx]
+                        x2 = x.tensor[b][h][pos][dim2_idx]
+                        
+                        cos_val = cos_table[pos][pair_idx]
+                        sin_val = sin_table[pos][pair_idx]
+                        
+                        new_x1 = x1 * cos_val - x2 * sin_val
+                        new_x2 = x1 * sin_val + x2 * cos_val
+                        
+                        x.tensor[b][h][pos][dim1_idx] = new_x1
+                        x.tensor[b][h][pos][dim2_idx] = new_x2
         
         return x
 

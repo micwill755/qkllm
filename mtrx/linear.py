@@ -12,10 +12,8 @@ class Linear:
 
     def forward(self, x):
         # y = mx + b
-        if len(x.shape) == 3:
-            batch, seq_len, emb_dim = x.shape
-            result = Tensor((batch, seq_len, emb_dim))
-            for b in range(batch):
-                result[b] = mat_mul(x[b], self.weights) #+ self.bias
-            return result
-        return 0
+        batch, seq_len = x.shape[0], x.shape[1]
+        result = Tensor((batch, seq_len, self.weights.shape[-1]))
+        for b in range(batch):
+            result[b] = mat_mul(x[b], self.weights) #+ self.bias
+        return result

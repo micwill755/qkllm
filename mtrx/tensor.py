@@ -64,6 +64,24 @@ class Tensor:
     def __str__(self):
         return self._print(self.shape, self.tensor)
     
+    def __mul__(self, other):
+        result = Tensor(self.shape)
+        for idx in product(*[range(d) for d in self.shape]):
+            result[idx] = self[idx] * other
+        return result
+
+    def __sub__(self, other):
+        result = Tensor(self.shape)
+        for idx in product(*[range(d) for d in self.shape]):
+            result[idx] = self[idx] - other[idx]
+        return result
+
+    def __add__(self, other):
+        result = Tensor(self.shape)
+        for idx in product(*[range(d) for d in self.shape]):
+            result[idx] = self[idx] + other[idx]
+        return result
+    
     def _create_shape(self, arr):
         if not isinstance(arr, list):
             return ()

@@ -91,12 +91,6 @@ class TensorParallelMLPBlock:
         self.h = [None] * tp_size      # post-ReLU activations
 
     def forward(self, x):
-        # TODO
-        '''h = self.fc1.forward(x)
-        h_relu = self.relu.forward(h)
-        y = self.fc2.forward(h_relu)
-        return y'''
-
         self.x = x
 
         # Column-parallel fc1 + ReLU per shard
@@ -279,6 +273,7 @@ if __name__ == "__main__":
         pp_size=PP_SIZE
     )
 
+    # 1. using dummy data
     np.random.seed(123) # Use a different seed for data
     x = np.random.randn(B, C_in)
     grad_output = np.random.randn(B, C_out)
@@ -296,4 +291,31 @@ if __name__ == "__main__":
     
     assert np.allclose(seq_grad_input, tp_grad_input, atol=1e-9)
 
-    print("Test Passed")
+    # 2. using real loss evaluation
+
+    '''# Create data and targets
+    x = np.random.randn(B, C_in)  # [4, 8]
+    targets = np.random.randint(0, C_out, size=B)  # [4] - class labels (0-7)
+
+    # Forward pass
+    y = seq_model.forward(x)  # [4, 8] - logits
+
+    # Compute softmax probabilities
+    exp_logits = np.exp(y - np.max(y, axis=1, keepdims=True))  # numerical stability
+    probs = exp_logits / np.sum(exp_logits, axis=1, keepdims=True)  # [4, 8]
+
+    # Compute cross-entropy loss
+    loss = -np.mean(np.log(probs[np.arange(B), targets]))
+
+    # Compute gradient of loss w.r.t. logits (this replaces dummy grad_output)
+    grad_output = probs.copy()  # [4, 8]
+    grad_output[np.arange(B), targets] -= 1  # subtract 1 from true class
+    grad_output /= B  # average over batch
+
+    # Backward pass with REAL gradient
+    grad_input = seq_model.backward(grad_output)
+
+    # Update weights
+    seq_model.update(learning_rate)
+
+    print("Test Passed")'''
