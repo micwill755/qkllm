@@ -1,7 +1,4 @@
-
-from mtrx.linear import Linear
-from mtrx.tensor import Tensor   
-from mtrx.mtrx import ones, reshape, mat_mul, mask, softmax
+from mx import Linear, Tensor, reshape, mat_mul, mask, softmax
 
 from rope import RoPE
 

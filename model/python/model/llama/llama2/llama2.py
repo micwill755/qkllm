@@ -4,10 +4,7 @@ import sys
 from pathlib import Path
 
 from embedding import Embedding
-from mtrx.mtrx import ones
-from mtrx.tensor import Tensor   
-from mtrx.module import Module
-from model.python.model.llama.feed_forward import FeedForwardLlama
+import mx
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from attention import MultiHeadAttention
@@ -15,7 +12,7 @@ from feed_forward import FeedForwardLlama
 
 import tiktoken
 
-class RMSNorm(Module):
+class RMSNorm(mx.Module):
     def __init__(self, emb_dim, eps=1e-5):
         super().__init__()
         self.eps = eps
@@ -27,7 +24,7 @@ class RMSNorm(Module):
 
     def forward(self, x):
         batch, seq_len, emb_dim = x.shape
-        result = Tensor((batch, seq_len, emb_dim))
+        result = mx.Tensor((batch, seq_len, emb_dim))
 
         for b in range(batch):
             for t in range(seq_len):
@@ -59,7 +56,7 @@ class Block:
         shortcut = x
         x = self.norm2(x)
         x = self.feed_forward(x)
-        #x = shortcut + x
+        x = shortcut + x
         
         return x
 
@@ -103,9 +100,37 @@ LLAMA2_CONFIG_MINI = {
 
 model = Llama2Model(LLAMA2_CONFIG_MINI)
 
-tokenizer = tiktoken.get_encoding("gpt2")
-txt1 = "Hello world"
-tokens = tokenizer.encode(txt1)
-input = Tensor([tokens])
-output = model(input)
-print(output)
+def test_llama2_output():
+    model = Llama2Model(LLAMA2_CONFIG_MINI)
+    tokenizer = tiktoken.get_encoding("gpt2")
+    
+    # Test input
+    text = "Hello world"
+    tokens = tokenizer.encode(text)
+    input = mx.Tensor([tokens])
+    
+    # Forward pass
+    output = model(input)
+    
+    # Assertions
+    batch, seq_len, emb_dim = output.shape
+    assert batch == 1, f"Expected batch=1, got {batch}"
+    assert seq_len == len(tokens), f"Expected seq_len={len(tokens)}, got {seq_len}"
+    assert emb_dim == LLAMA2_CONFIG_MINI["emb_dim"], f"Expected emb_dim={LLAMA2_CONFIG_MINI['emb_dim']}, got {emb_dim}"
+    
+    # Check output is not all zeros
+    has_nonzero = False
+    for b in range(batch):
+        for s in range(seq_len):
+            for e in range(emb_dim):
+                if output[b][s][e] != 0:
+                    has_nonzero = True
+                    break
+                
+    assert has_nonzero, "Output is all zeros"
+    
+    print("✓ All tests passed")
+    return output
+
+# Run test
+test_llama2_output()

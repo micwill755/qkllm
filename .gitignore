@@ -3,6 +3,12 @@ __pycache__/
 *.pyc
 *.pyo
 
+# python lib files
+*.egg-info
+dist/
+build/
+*.egg
+
 # macOS files
 .DS_Store
 

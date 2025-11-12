@@ -1,5 +1,5 @@
 import random
-from mtrx.tensor import Tensor
+from mx import Tensor
 
 class Embedding:
     def __init__(self, vocab_size, emb_dim):
