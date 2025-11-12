@@ -2,91 +2,34 @@ import math
 import os
 import sys
 from pathlib import Path
+import mx
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from embedding import Embedding
-from mtrx.mtrx import ones, reshape, mat_mul, mask, softmax
-from mtrx.tensor import Tensor   
-from mtrx.module import Module
+
+from attention import GroupQueryAttention
 from feed_forward import FeedForwardLlama
-from mtrx.linear import Linear
 
-class GroupQueryAttention:
-    def __init__(self, emb_dim, num_heads, num_kv_heads):
-        self.num_heads = num_heads
-        self.num_kv_heads = num_kv_heads
-        self.num_groups = num_heads // num_kv_heads
-        self.head_dim = emb_dim // num_heads
+import tiktoken
 
-        self.q_W = Linear(emb_dim, emb_dim)
-        self.k_W = Linear(emb_dim, num_kv_heads * self.head_dim)
-        self.v_W = Linear(emb_dim, num_kv_heads * self.head_dim)
-        self.out_proj = Linear(emb_dim, emb_dim)
-    
-    def __call__(self, x):
-        return self.forward(x)
-    
-    def _repeat_kv_heads(self, x, num_groups):
-        # x shape: [b, num_kv_heads, seq_len, head_dim]
-        # output: [b, num_kv_heads * num_groups, seq_len, head_dim]
-        b, num_kv_heads, seq_len, head_dim = x.shape
-        result = Tensor((b, num_kv_heads * num_groups, seq_len, head_dim))
-        
-        for batch_idx in range(b):
-            for kv_head_idx in range(num_kv_heads):
-                for group_idx in range(num_groups):
-                    output_head_idx = kv_head_idx * num_groups + group_idx
-                    for seq_idx in range(seq_len):
-                        for dim_idx in range(head_dim):
-                            result[batch_idx][output_head_idx][seq_idx][dim_idx] = x[batch_idx][kv_head_idx][seq_idx][dim_idx]
-        
-        return result
-
-
-    def forward(self, x):
-        b, seq_len, emb_dim = x.shape
-        
-        query = self.q_W(x)
-        key = self.k_W(x)
-        value = self.v_W(x)
-
-        queries = reshape(query, (b, seq_len, self.num_heads, self.head_dim))
-        keys = reshape(key, (b, seq_len, self.num_kv_heads, self.head_dim))
-        values = reshape(value, (b, seq_len, self.num_kv_heads, self.head_dim))
-
-        queries = queries.transpose(1, 2)
-        keys = keys.transpose(1, 2)
-        values = values.transpose(1, 2)
-
-        # Repeat K/V heads to match Q heads
-        keys = self._repeat_kv_heads(keys, (self.num_heads // self.num_kv_heads))
-        values = self._repeat_kv_heads(values, (self.num_heads // self.num_kv_heads))
-
-        attn_scores = mat_mul(queries, keys.transpose(2, 3)) / math.sqrt(self.head_dim)
-        attn_scores = mask(attn_scores)
-        attn_weights = softmax(attn_scores)
-        context = mat_mul(attn_weights, values)
-        context = context.transpose(1, 2)
-
-        context = reshape(context, (b, seq_len, emb_dim))
-
-        return self.out_proj(context)
-
-class RMSNorm (Module):
+class RMSNorm(mx.Module):
     def __init__(self, emb_dim, eps=1e-5):
         super().__init__()
         self.eps = eps
-        self.weights = ones((emb_dim, ))
+        self.emb_dim = emb_dim
+        self.weights = [1.0] * emb_dim
 
     def __call__(self, x):
         return self.forward(x)
 
     def forward(self, x):
         batch, seq_len, emb_dim = x.shape
-        result = Tensor((batch, seq_len, emb_dim))
+        result = mx.Tensor((batch, seq_len, emb_dim))
 
         for b in range(batch):
             for t in range(seq_len):
-                ms = sum (x[b][t][e] ** 2 for e in range(emb_dim)) / emb_dim
+                ms = sum(x[b][t][e] ** 2 for e in range(emb_dim)) / emb_dim
                 rms = math.sqrt(ms + self.eps)
                 for e in range(emb_dim):
                     result[b][t][e] = (x[b][t][e] / rms) * self.weights[e]
@@ -118,7 +61,7 @@ class Block:
         
         return x
 
-class Llama2Model:
+class Llama3Model:
     def __init__(self, cfg):
         self.tok_emb = Embedding(cfg["vocab_size"], cfg["emb_dim"])
         self.blocks = [Block(cfg) for _ in range(cfg["n_layers"])]
@@ -156,8 +99,39 @@ LLAMA2_CONFIG_MINI = {
     "hidden_dim": 512        # Small hidden dimension
 }
 
-model = Llama2Model(LLAMA2_CONFIG_MINI)
+model = Llama3Model(LLAMA2_CONFIG_MINI)
 
-input = Tensor((1, 10, LLAMA2_CONFIG_MINI["emb_dim"]), use_rand=True)
-output = model(input)
-print(output)
+def test_llama2_output():
+    model = Llama3Model(LLAMA2_CONFIG_MINI)
+    tokenizer = tiktoken.get_encoding("gpt2")
+    
+    # Test input
+    text = "Hello world"
+    tokens = tokenizer.encode(text)
+    input = mx.Tensor([tokens])
+    
+    # Forward pass
+    output = model(input)
+    
+    # Assertions
+    batch, seq_len, emb_dim = output.shape
+    assert batch == 1, f"Expected batch=1, got {batch}"
+    assert seq_len == len(tokens), f"Expected seq_len={len(tokens)}, got {seq_len}"
+    assert emb_dim == LLAMA2_CONFIG_MINI["emb_dim"], f"Expected emb_dim={LLAMA2_CONFIG_MINI['emb_dim']}, got {emb_dim}"
+    
+    # Check output is not all zeros
+    has_nonzero = False
+    for b in range(batch):
+        for s in range(seq_len):
+            for e in range(emb_dim):
+                if output[b][s][e] != 0:
+                    has_nonzero = True
+                    break
+                
+    assert has_nonzero, "Output is all zeros"
+    
+    print("✓ All tests passed")
+    return output
+
+# Run test
+test_llama2_output()

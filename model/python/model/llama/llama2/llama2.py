@@ -2,15 +2,17 @@ import math
 import os
 import sys
 from pathlib import Path
-
-from embedding import Embedding
 import mx
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from embedding import Embedding
+
 from attention import MultiHeadAttention
 from feed_forward import FeedForwardLlama
 
 import tiktoken
+
 
 class RMSNorm(mx.Module):
     def __init__(self, emb_dim, eps=1e-5):

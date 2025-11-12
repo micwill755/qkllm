@@ -1,5 +1,3 @@
 # Core dependencies
 tiktoken
-
-# Local packages
--e ../mtrx
+qmx
