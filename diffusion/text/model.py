@@ -1,75 +1,74 @@
-import math
+from time_embedding import TimeEmbedding
+from token_embedding import TokenEmbedding
+from mx.linear import Linear
+from mx.mtrx import mat_mul, reshape
+from mx.norm import LayerNorm
 
-class TimeEmbedding:
-    def __init__(self, emb_dim):
+import mx
+
+# start with simple MHA
+class MultiHeadAttention:
+    def __init__(self, emb_dim, num_heads):
         self.emb_dim = emb_dim
+        self.head_dim = emb_dim // num_heads
+        
+        self.q_W = Linear(emb_dim, emb_dim)
+        self.k_W = Linear(emb_dim, emb_dim)
+        self.v_W = Linear(emb_dim, emb_dim)
+
+        self.out_proj = Linear(emb_dim, emb_dim)
     
-    def forward(self, timestep):
-        """Sinusoidal time embedding"""
-        half_dim = self.emb_dim // 2
-        emb = []
-        for i in range(half_dim):
-            freq = math.exp(-math.log(10000.0) * i / half_dim)
-            emb.append(math.sin(timestep * freq))
-            emb.append(math.cos(timestep * freq))
-        return emb[:self.emb_dim]
+    def __call__(self, x):
+        return self.forward(x)
 
-
-class Embedding:
-    def __init__(self, vocab_size, emb_dim):
-        self.vocab_size = vocab_size
-        self.emb_dim = emb_dim
-        # Initialize random embeddings
-        self.weights = [[random.random() * 0.02 - 0.01 for _ in range(emb_dim)] 
-                       for _ in range(vocab_size)]
-    
-    def forward(self, tokens):
-        return [self.weights[token] for token in tokens]
-
-
-class Linear:
-    def __init__(self, in_dim, out_dim):
-        self.in_dim = in_dim
-        self.out_dim = out_dim
-        self.weights = [[random.random() * 0.02 - 0.01 for _ in range(out_dim)] 
-                       for _ in range(in_dim)]
-        self.bias = [0.0] * out_dim
-    
     def forward(self, x):
-        # x: (seq_len, in_dim) -> (seq_len, out_dim)
-        output = []
-        for seq_vec in x:
-            out_vec = self.bias.copy()
-            for i, val in enumerate(seq_vec):
-                for j in range(self.out_dim):
-                    out_vec[j] += val * self.weights[i][j]
-            output.append(out_vec)
-        return output
+        query = self.q_W(x)
+        key = self.k_W(x)
+        value = self.v_W(x)
 
+        # TODO: add underlying functions to calculate 
+        # using 1d array so we dont need to transpose
 
-class DiffusionTransformer:
-    def __init__(self, vocab_size, emb_dim, num_layers=4):
-        self.vocab_size = vocab_size
-        self.emb_dim = emb_dim
-        self.token_embedding = Embedding(vocab_size, emb_dim)
+# start with using simple blocks from GPT2
+class Block (mx.Module):
+    def __init__(self, emb_dim, n_heads):
+        self.att = MultiHeadAttention(emb_dim, num_heads=n_heads)
+        #self.ff = FeedForwardGPT(cfg)
+        self.norm1 = LayerNorm(emb_dim)
+        self.norm2 = LayerNorm(emb_dim)
+
+    def __call__(self, x):
+        return self.forward(x)
+
+    def forward(self, x):
+        # TODO
+        
+        # Shortcut connection for attention block
+        shortcut = x
+        x = self.norm1.forward(x)
+        x = self.att.forward(x)   # Shape [batch_size, num_tokens, emb_size]
+        #x = self.drop_shortcut(x)
+        #x = x + shortcut  # Add the original input back
+
+        # Shortcut connection for feed-forward block
+        shortcut = x
+        x = self.norm2.forward(x)
+        #x = self.ff.forward(x)
+        #x = self.drop_shortcut(x)
+        #x = x + shortcut  # Add the original input back
+
+        return x
+
+class DiffusionModel(mx.Module):
+    def __init__(self, vocab_size, emb_dim, n_heads, n_layers):
+        self.token_embedding = TokenEmbedding(vocab_size, emb_dim)
         self.time_embedding = TimeEmbedding(emb_dim)
-        self.output_head = Linear(emb_dim, vocab_size)
+        self.blocks = [Block(emb_dim, n_heads) for _ in range(n_layers)]
+        self.output_proj = Linear(emb_dim, emb_dim)
+
+    def forward(self, tokens, timestep):
+        token_emb = self.token_embedding(tokens)
+        time_emb = self.time_embedding(timestep)
+        combined = token_emb + time_emb
     
-    def forward(self, noisy_tokens, timestep):
-        # Embed tokens
-        x = self.token_embedding.forward(noisy_tokens)
-        
-        # Get time embedding and add to all positions
-        t_emb = self.time_embedding.forward(timestep)
-        for i in range(len(x)):
-            for j in range(self.emb_dim):
-                x[i][j] += t_emb[j]
-        
-        # Simple processing (in practice, use transformer blocks)
-        # For minimal implementation, just pass through output head
-        logits = self.output_head.forward(x)
-        
-        return logits
-
-
-import random
+        # TODO
