@@ -10,9 +10,9 @@ from embedding import Embedding
 
 from attention import MultiHeadAttention
 from feed_forward import FeedForwardLlama
+from mx import Linear
 
 import tiktoken
-
 
 class RMSNorm(mx.Module):
     def __init__(self, emb_dim, eps=1e-5):
@@ -66,7 +66,8 @@ class Llama2Model:
     def __init__(self, cfg):
         self.tok_emb = Embedding(cfg["vocab_size"], cfg["emb_dim"])
         self.blocks = [Block(cfg) for _ in range(cfg["n_layers"])]
-        self.final = RMSNorm(cfg["emb_dim"])
+        self.final_norm = RMSNorm(cfg["emb_dim"])
+        self.output_proj = Linear(cfg["emb_dim"], cfg["vocab_size"])  # Project to vocab
 
     def __call__(self, x):
         return self.forward(x)
@@ -77,8 +78,9 @@ class Llama2Model:
         for block in self.blocks:
             x = block(x)
         
-        x = self.final(x)
-        return x
+        x = self.final_norm(x)
+        logits = self.output_proj(x)  # [batch, seq_len, vocab_size]
+        return logits
 
 LLAMA2_CONFIG_7B = {
     "vocab_size": 32000,     # Vocabulary size

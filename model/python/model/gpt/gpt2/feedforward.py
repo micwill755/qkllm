@@ -1,6 +1,6 @@
 from model.linear import Linear, Linear1d
 from model.activation_functions import GELU, SwiGLU
-from qmx.module import Module
+from qkmx.module import Module
 
 class FeedForwardGPT(Module):
     def __init__(self, cfg):

@@ -1,8 +1,8 @@
 import math
-import qmx.mtrx
-from qmx.tensor import Tensor
-from qmx.mtrx import softmax, dot_product, mat_mul, mask, reshape
-from qmx.linear import Linear
+import qkmx.mtrx
+from qkmx.tensor import Tensor
+from qkmx.mtrx import softmax, dot_product, mat_mul, mask, reshape
+from qkmx.linear import Linear
 
 #inputs = torch.rand(6, 3)
 # we are hard coding to see the values 
@@ -337,7 +337,7 @@ class GroupQueryAttention:
         return self.out_proj(context)
 
 emb_dim = 24
-inputs = qmx.mtrx.randn((1, 8, emb_dim))
+inputs = qkmx.mtrx.randn((1, 8, emb_dim))
 attention = GroupQueryAttention(emb_dim, num_heads=4, num_kv_heads=2)
 out = attention(inputs)
 print(out)
