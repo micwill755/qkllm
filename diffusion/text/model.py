@@ -1,7 +1,7 @@
 from time_embedding import TimeEmbedding
 from token_embedding import TokenEmbedding
 from mx.linear import Linear
-from mx import LayerNorm, RMSNorm
+from mx import LayerNorm, RMSNorm, Tensor
 
 import mx
 
@@ -93,9 +93,10 @@ class DiffusionModel(mx.Module):
         self.output_proj = Linear(emb_dim, emb_dim)
 
     def forward(self, tokens, timestep):
-        token_emb = self.token_embedding(tokens)
-        time_emb = self.time_embedding(timestep)
-        x = token_emb + time_emb
+        token_emb = self.token_embedding(tokens)  # [batch, seq_len, emb_dim]
+        time_emb = self.time_embedding(timestep)  # [batch, emb_dim]
+        time_emb = time_emb.reshape([time_emb.shape[0], 1, time_emb.shape[1]])  # [batch, 1, emb_dim]
+        x = token_emb + time_emb  # Broadcasting works now
     
         # Pass through transformer blocks
         for block in self.blocks:
@@ -105,3 +106,29 @@ class DiffusionModel(mx.Module):
         x = self.output_proj(x)
         
         return x
+    
+# Test parameters
+vocab_size = 1000
+emb_dim = 128
+n_heads = 4
+n_layers = 2
+batch_size = 2
+seq_len = 10
+
+# Initialize model
+model = DiffusionModel(vocab_size, emb_dim, n_heads, n_layers)
+
+# Create dummy inputs with INTEGER token IDs (not random floats!)
+tokens = mx.zeros([batch_size, seq_len])  # All zeros for now (valid token IDs)
+timestep = mx.randn([batch_size, 1])
+
+# Forward pass
+output = model.forward(tokens, timestep)
+
+# Verify output shape
+print(f"Input shape: {tokens.shape}")
+print(f"Timestep shape: {timestep.shape}")
+print(f"Output shape: {output.shape}")
+assert output.shape == (batch_size, seq_len, emb_dim), "Output shape mismatch!"
+
+print("✓ Model test passed!")
