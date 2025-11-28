@@ -34,6 +34,8 @@ mesh = DeviceMesh(dim_names=("pp", "tp"), dim_shapes=(2, 4))
     mesh.get("pp", rank=0) -> [0, 2]
     mesh.get("pp", rank=1) -> [1, 3] '''
 
+import itertools
+
 class DeviceMesh:
     def __init__(self, dim_names, dim_shapes):
         self.dim_names = dim_names
@@ -69,12 +71,17 @@ class DeviceMesh:
     
     def _create_coords(self):
         coords = []
-        for r in range(self.total_ranks):
+        # option 1 using mod and floor
+        '''for r in range(self.total_ranks):
             c = []
             for s in self.dim_shapes:
                 c.insert(0, r % self.dim_shapes[s])
                 r //= self.dim_shapes[s]
-            coords.append(c)
+            coords.append(c)'''
+
+        ranges = [range(s) for s in self.dim_shapes];
+        # Get all combinations (Cartesian product)
+        coords = list(itertools.product(*ranges))
         return coords
 
     # question 2
@@ -90,20 +97,11 @@ class DeviceMesh:
     # the same "slice" along the specified dimension.
     def get(self, dim_name, rank):
         dim_name_i = self.dim_names.index(dim_name)
-        coords = []
         t = rank
-
-        # step 1 build out coordinates
-        # we need the coordinate system because 
-        # you need to know which position along 
-        # each dimension a rank occupies to find its group
-        for s in self.dim_shapes:
-            coords.insert(0, t % self.dim_shapes[s])
-            t //= self.dim_shapes[s]
-        
-        target_coord = coords[dim_name_i]
-
         result = []
+
+        # Get the coordinate of the given rank along the target dimension
+        target_coord = self.coords[rank][dim_name_i]
 
         for r in range(self.total_ranks):
             # Check if this rank has the same coordinate for target dimension
@@ -112,10 +110,10 @@ class DeviceMesh:
 
         return result
 
+
 mesh = DeviceMesh(dim_names=('tp', 'dp', 'pp'), dim_shapes=(2, 2, 2))
 print(mesh.mesh)
-
 print(mesh.shape("tp"))
-print(mesh.get('pp', rank=1))
+print(mesh.get('pp', rank=0))
 print(mesh.get('tp', rank=1))
 print(mesh.get('dp', rank=1))
