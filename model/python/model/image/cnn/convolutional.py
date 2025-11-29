@@ -1,5 +1,6 @@
 import mx
-import conv2d
+import numpy as np
+from conv2d import conv2d, conv2d_full
 
 class Convolutional(mx.Module):
     def __init__(self, input_shape, kernel_size, depth):
@@ -13,12 +14,11 @@ class Convolutional(mx.Module):
         self.biases = np.random.randn(*self.output_shape)
         
     def forward(self, x):
-        self.input = input
+        self.input = x
         self.output = np.copy(self.biases)
         for i in range(self.depth):
             for j in range(self.input_depth):
                 self.output[i] += conv2d(self.input[j], self.kernels[i, j])
-                #self.output[i] += signal.correlate2d(self.input[j], self.kernels[i, j], "valid")
         return self.output
 
     # TODO: abstract backward into mx.Module
@@ -28,9 +28,8 @@ class Convolutional(mx.Module):
 
         for i in range(self.depth):
             for j in range(self.input_depth):
-                '''kernels_gradient[i, j] = signal.correlate2d(self.input[j], output_gradient[i], "valid")
-                input_gradient[j] += signal.convolve2d(output_gradient[i], self.kernels[i, j], "full")'''
-                conv2d(self.input[j], self.kernels[i, j])
+                kernels_gradient[i, j] = conv2d(self.input[j], output_gradient[i])
+                input_gradient[j] += conv2d_full(output_gradient[i], np.flip(self.kernels[i, j]))
 
         self.kernels -= learning_rate * kernels_gradient
         self.biases -= learning_rate * output_gradient
