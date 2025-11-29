@@ -23,3 +23,6 @@ build/
 
 # Tensor RT files
 *.trt
+
+# MNIST dataset
+model/python/model/image/cnn/data/
