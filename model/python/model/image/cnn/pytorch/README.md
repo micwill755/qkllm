@@ -83,9 +83,25 @@ PyTorch handles all the backward pass math automatically using autograd!
 
 ## Running the Code
 
+### Single GPU/CPU Training
 ```bash
 cd qkllm/model/python/model/image/cnn/pytorch
 python train_pytorch.py
+```
+
+### Multi-GPU Training with FSDP
+```bash
+cd qkllm/model/python/model/image/cnn/pytorch
+
+# Single GPU (FSDP compatible)
+python train_pytorch_fsdp.py
+
+# Multi-GPU (e.g., 2 GPUs)
+torchrun --nproc_per_node=2 train_pytorch_fsdp.py
+
+# Or use the provided script
+chmod +x run_fsdp.sh
+./run_fsdp.sh
 ```
 
 ## Requirements
@@ -115,3 +131,52 @@ pip install torch torchvision
 
 The NumPy version is great for learning how CNNs work under the hood.
 The PyTorch version is what you'd use in practice!
+
+## FSDP (Fully Sharded Data Parallel)
+
+FSDP is PyTorch's solution for efficient distributed training:
+
+### What FSDP Does:
+- **Shards model parameters** across GPUs (reduces memory per GPU)
+- **Shards gradients** during backward pass
+- **Shards optimizer states** (Adam, SGD, etc.)
+- Enables training larger models than fit on a single GPU
+
+### Key Features:
+1. **Full Shard Strategy**: Shards everything (parameters, gradients, optimizer states)
+2. **Auto Wrap Policy**: Automatically wraps layers based on size
+3. **CPU Offloading**: Can offload to CPU for even larger models
+4. **Mixed Precision**: Works with automatic mixed precision (AMP)
+
+### When to Use FSDP:
+- Training on multiple GPUs
+- Model doesn't fit on single GPU
+- Want to scale to larger batch sizes
+- Need efficient distributed training
+
+### Comparison:
+
+| Method | Memory per GPU | Speed | Use Case |
+|--------|---------------|-------|----------|
+| Single GPU | Full model | Baseline | Small models |
+| DataParallel (DP) | Full model | 1.5-2x | Legacy multi-GPU |
+| DistributedDataParallel (DDP) | Full model | 3-4x | Standard multi-GPU |
+| FSDP | Sharded model | 3-4x | Large models, memory constrained |
+
+### Example Output:
+```
+Using device: cuda:0
+World size: 2
+Generating dummy data...
+Creating model...
+Wrapping model with FSDP...
+Training...
+Epoch 1/3, Loss: 2.3012, Accuracy: 10.50%
+Epoch 2/3, Loss: 2.2845, Accuracy: 12.00%
+Epoch 3/3, Loss: 2.2701, Accuracy: 14.50%
+
+Evaluating...
+Test Accuracy: 16.00%
+
+Model saved to simple_cnn_fsdp.pth
+```
